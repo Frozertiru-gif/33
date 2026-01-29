@@ -1,16 +1,16 @@
 # tg_user_clicker
 
-Minimal Telegram MTProto user client using Telethon.
+Минимальный пользовательский клиент Telegram MTProto на базе Telethon.
 
-## Setup
+## Настройка
 
-1. Copy `.env.example` to `.env` and fill in your credentials:
+1. Скопируйте `.env.example` в `.env` и заполните данные:
    - `TG_API_ID`
    - `TG_API_HASH`
    - `TG_PHONE`
-   - `TG_2FA_PASSWORD` (optional)
-   - `SESSION_NAME` (defaults to `user`)
-   - `BOT_USERNAME` (optional for `press`, required if not passing `--chat`)
+   - `TG_2FA_PASSWORD` (необязательно)
+   - `SESSION_NAME` (по умолчанию `user`)
+   - `BOT_USERNAME` (необязательно для `press`, обязательно если не передаётся `--chat`)
    - `BUTTON_NEXT_TEXT`
    - `BUTTON_SERIES_TEXT`
    - `BUTTON_QUALITY_TEXT`
@@ -22,93 +22,93 @@ Minimal Telegram MTProto user client using Telethon.
    - `TITLES_PATH`
    - `SENT_DEDUP_LIMIT`
 
-2. Install dependencies:
+2. Установите зависимости:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Usage
+## Использование
 
-Authorize and create the session file:
+Авторизуйтесь и создайте файл сессии:
 
 ```bash
 python -m app.cli login
 ```
 
-Check the current session user:
+Проверьте пользователя текущей сессии:
 
 ```bash
 python -m app.cli me
 ```
 
-Press the "Вперёд" button from recent messages:
+Нажмите кнопку «Вперёд» из последних сообщений:
 
 ```bash
 python -m app.cli press --contains "Вперёд"
 ```
 
-Search for a title and pick the first result:
+Найдите тайтл и выберите первый результат:
 
 ```bash
 python -m app.cli search --chat @BOT --title "Название"
 ```
 
-Inline search for a title and pick the first result:
+Инлайн-поиск тайтла и выбор первого результата:
 
 ```bash
 python -m app.cli search --chat @fvid_heb_bot --title "время приключений" --inline
 ```
 
-Process a list of titles with resume support:
+Обработайте список тайтлов с поддержкой продолжения:
 
 ```bash
 python -m app.cli run-list --chat @BOT --titles-file ./titles.txt
 ```
 
-Example `titles.txt`:
+Пример `titles.txt`:
 
 ```text
-# Lines starting with # are ignored
+# Строки, начинающиеся с #, игнорируются
 Название 1
 Название 2
 
 Название 3
 ```
 
-Run a single title with resume state:
+Запуск одного тайтла с сохранением состояния:
 
 ```bash
 python -m app.cli run-one --chat @BOT --title "Название"
 ```
 
-Run a series inline search and forward episodes:
+Инлайн-поиск серии и пересылка эпизодов:
 
 ```bash
 python -m app.cli series --chat @fvid_heb_bot --title "декстер" --inline
 ```
 
-Check resume status:
+Проверка статуса продолжения:
 
 ```bash
 python -m app.cli status
 ```
 
-Reset resume state (requires confirmation):
+Сброс состояния продолжения (нужно подтверждение):
 
 ```bash
 python -m app.cli reset --yes
 ```
 
-## Web UI
+## Веб-интерфейс
 
-Install dependencies (FastAPI + Uvicorn are included in `requirements.txt`), then run:
+Установите зависимости (FastAPI + Uvicorn уже включены в `requirements.txt`), затем запустите:
 
 ```bash
 uvicorn app.web.server:app --host 127.0.0.1 --port 8080
 ```
 
-Open <http://127.0.0.1:8080> in your browser to:
+Откройте <http://127.0.0.1:8080> в браузере, чтобы:
 
 - запускать `run-one` и `run-list`,
 - смотреть статус `state.json`,
@@ -124,10 +124,10 @@ Open <http://127.0.0.1:8080> in your browser to:
 - `POST /api/reset` — сброс state.json.
 - `GET /api/logs?tail=200` — последние строки логов.
 
-Resume behavior:
+Поведение при продолжении:
 
-- Progress is stored in `state.json` (configurable via `STATE_PATH`).
-- On restart, `run-list` continues from `current_index` and skips media IDs already in `sent_ids`.
-- The last media message ID is tracked per title to continue series runs without duplicates.
+- Прогресс хранится в `state.json` (путь настраивается через `STATE_PATH`).
+- При перезапуске `run-list` продолжает с `current_index` и пропускает media ID, уже находящиеся в `sent_ids`.
+- Для каждого тайтла хранится ID последнего медиа-сообщения, чтобы продолжать сериалы без дублей.
 
-The session file is stored automatically and reused on subsequent runs, so you won't be prompted for the code again.
+Файл сессии сохраняется автоматически и используется при следующих запусках, поэтому код подтверждения вводить повторно не нужно.
