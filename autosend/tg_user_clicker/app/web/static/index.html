@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tg_user_clicker</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 24px;
+        max-width: 960px;
+      }
+      fieldset {
+        margin-bottom: 16px;
+        padding: 12px;
+      }
+      label {
+        display: block;
+        margin-bottom: 6px;
+      }
+      input[type="text"],
+      textarea {
+        width: 100%;
+        padding: 8px;
+        box-sizing: border-box;
+      }
+      textarea {
+        min-height: 120px;
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .row > div {
+        flex: 1 1 240px;
+      }
+      button {
+        padding: 8px 14px;
+        margin-right: 8px;
+      }
+      .status-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 8px;
+      }
+      pre {
+        background: #111;
+        color: #f1f1f1;
+        padding: 12px;
+        max-height: 300px;
+        overflow: auto;
+      }
+      .error {
+        color: #b30000;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>tg_user_clicker</h1>
+
+    <fieldset>
+      <legend>Run One</legend>
+      <div class="row">
+        <div>
+          <label for="title">Title</label>
+          <input id="title" type="text" placeholder="Название" />
+        </div>
+        <div>
+          <label for="bot">Bot username</label>
+          <input id="bot" type="text" placeholder="@bot" />
+        </div>
+      </div>
+      <label>
+        <input id="inline" type="checkbox" /> Use inline search
+      </label>
+      <button id="run-one">Start One</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>Run List</legend>
+      <label for="titles">Titles (one per line)</label>
+      <textarea id="titles" placeholder="Title 1\nTitle 2"></textarea>
+      <div class="row">
+        <div>
+          <label for="titles-file">Titles file (optional)</label>
+          <input id="titles-file" type="text" placeholder="./titles.txt" />
+        </div>
+        <div>
+          <label for="bot-list">Bot username</label>
+          <input id="bot-list" type="text" placeholder="@bot" />
+        </div>
+      </div>
+      <label>
+        <input id="inline-list" type="checkbox" /> Use inline search
+      </label>
+      <button id="run-list">Start List</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>Controls</legend>
+      <button id="stop">Stop</button>
+      <button id="reset">Reset</button>
+      <span id="action-status"></span>
+    </fieldset>
+
+    <fieldset>
+      <legend>Status</legend>
+      <div id="status-error" class="error"></div>
+      <div class="status-grid" id="status-grid"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Logs</legend>
+      <pre id="logs"></pre>
+    </fieldset>
+
+    <script>
+      const actionStatus = document.getElementById('action-status');
+      const statusGrid = document.getElementById('status-grid');
+      const statusError = document.getElementById('status-error');
+      const logsEl = document.getElementById('logs');
+
+      async function postJson(url, payload) {
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload || {}),
+        });
+        if (!resp.ok) {
+          const text = await resp.text();
+          throw new Error(text || resp.statusText);
+        }
+        return resp.json();
+      }
+
+      function setStatus(message, isError) {
+        actionStatus.textContent = message;
+        actionStatus.style.color = isError ? '#b30000' : '#006400';
+      }
+
+      function renderStatus(data) {
+        const summary = data.summary || {};
+        const manager = data.run_manager || {};
+        const items = [
+          ['phase', summary.phase],
+          ['current_index', summary.current_index],
+          ['total_titles', summary.total_titles],
+          ['last_title', summary.last_title],
+          ['sent_total', summary.sent_total],
+          ['last_media_message_id', summary.last_media_message_id],
+          ['runner', manager.running ? 'running' : 'idle'],
+          ['started_at', manager.started_at || ''],
+        ];
+        statusGrid.innerHTML = items
+          .map(([label, value]) => `<div><strong>${label}</strong>: ${value ?? ''}</div>`)
+          .join('');
+        statusError.textContent = manager.last_error ? `error: ${manager.last_error}` : '';
+      }
+
+      async function refreshStatus() {
+        try {
+          const resp = await fetch('/api/status');
+          if (!resp.ok) {
+            throw new Error(await resp.text());
+          }
+          const data = await resp.json();
+          renderStatus(data);
+        } catch (err) {
+          statusError.textContent = err.message;
+        }
+      }
+
+      async function refreshLogs() {
+        try {
+          const resp = await fetch('/api/logs?tail=200');
+          if (!resp.ok) {
+            throw new Error(await resp.text());
+          }
+          const data = await resp.json();
+          logsEl.textContent = (data.lines || []).join('\n');
+        } catch (err) {
+          logsEl.textContent = err.message;
+        }
+      }
+
+      document.getElementById('run-one').addEventListener('click', async () => {
+        const title = document.getElementById('title').value.trim();
+        const bot = document.getElementById('bot').value.trim();
+        const inline = document.getElementById('inline').checked;
+        if (!title) {
+          setStatus('Title is required', true);
+          return;
+        }
+        try {
+          await postJson('/api/run/one', {
+            title,
+            bot_username: bot || null,
+            inline,
+          });
+          setStatus('Started run-one', false);
+          await refreshStatus();
+        } catch (err) {
+          setStatus(err.message, true);
+        }
+      });
+
+      document.getElementById('run-list').addEventListener('click', async () => {
+        const lines = document.getElementById('titles').value
+          .split('\n')
+          .map(line => line.trim())
+          .filter(Boolean);
+        const titlesFile = document.getElementById('titles-file').value.trim();
+        const bot = document.getElementById('bot-list').value.trim();
+        const inline = document.getElementById('inline-list').checked;
+        try {
+          await postJson('/api/run/list', {
+            titles: lines.length ? lines : null,
+            titles_file: titlesFile || null,
+            bot_username: bot || null,
+            inline,
+          });
+          setStatus('Started run-list', false);
+          await refreshStatus();
+        } catch (err) {
+          setStatus(err.message, true);
+        }
+      });
+
+      document.getElementById('stop').addEventListener('click', async () => {
+        try {
+          await postJson('/api/stop');
+          setStatus('Stop requested', false);
+          await refreshStatus();
+        } catch (err) {
+          setStatus(err.message, true);
+        }
+      });
+
+      document.getElementById('reset').addEventListener('click', async () => {
+        if (!confirm('Reset state?')) {
+          return;
+        }
+        try {
+          await postJson('/api/reset');
+          setStatus('State reset', false);
+          await refreshStatus();
+        } catch (err) {
+          setStatus(err.message, true);
+        }
+      });
+
+      refreshStatus();
+      refreshLogs();
+      setInterval(refreshStatus, 1000);
+      setInterval(refreshLogs, 1000);
+    </script>
+  </body>
+</html>

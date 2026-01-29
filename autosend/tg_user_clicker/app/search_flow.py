@@ -18,9 +18,12 @@ async def _wait_for_results_message(
     *,
     after_id: int,
     timeout_seconds: int,
+    stop_event: asyncio.Event | None = None,
 ) -> Any | None:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
+        if stop_event is not None and stop_event.is_set():
+            return None
         messages = await client.get_messages(entity, limit=10)
         for message in messages:
             if message.id <= after_id:
@@ -40,9 +43,12 @@ async def _wait_for_next_message(
     *,
     after_id: int,
     timeout_seconds: int,
+    stop_event: asyncio.Event | None = None,
 ) -> Any | None:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
+        if stop_event is not None and stop_event.is_set():
+            return None
         messages = await client.get_messages(entity, limit=10)
         for message in messages:
             if message.id <= after_id:
@@ -60,9 +66,12 @@ async def wait_for_message_by_id(
     *,
     message_id: int,
     timeout_seconds: int,
+    stop_event: asyncio.Event | None = None,
 ) -> Any | None:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
+        if stop_event is not None and stop_event.is_set():
+            return None
         message = await client.get_messages(entity, ids=message_id)
         if isinstance(message, list):
             message = message[0] if message else None
@@ -72,7 +81,13 @@ async def wait_for_message_by_id(
     return None
 
 
-async def run_search_and_pick_first(client: Any, bot_username: str, title: str) -> dict:
+async def run_search_and_pick_first(
+    client: Any,
+    bot_username: str,
+    title: str,
+    *,
+    stop_event: asyncio.Event | None = None,
+) -> dict:
     config = load_config()
     entity = await client.get_entity(bot_username)
     send_text = f"{config.search_send_prefix}{title}"
@@ -83,8 +98,11 @@ async def run_search_and_pick_first(client: Any, bot_username: str, title: str) 
         entity,
         after_id=sent_message.id,
         timeout_seconds=config.search_results_timeout_seconds,
+        stop_event=stop_event,
     )
     if not results_message:
+        if stop_event is not None and stop_event.is_set():
+            return {"ok": True, "reason": "stopped"}
         return {"ok": False, "reason": "timeout_results"}
 
     buttons = getattr(results_message, "buttons", None) or []
@@ -101,8 +119,11 @@ async def run_search_and_pick_first(client: Any, bot_username: str, title: str) 
         entity,
         after_id=results_message.id,
         timeout_seconds=config.after_pick_timeout_seconds,
+        stop_event=stop_event,
     )
     if not next_message:
+        if stop_event is not None and stop_event.is_set():
+            return {"ok": True, "reason": "stopped"}
         return {"ok": False, "reason": "timeout_after_pick"}
 
     return {
@@ -119,6 +140,8 @@ async def run_inline_search_and_pick_first(
     bot_username: str,
     query: str,
     timeout: int = 30,
+    *,
+    stop_event: asyncio.Event | None = None,
 ) -> dict:
     bot = await client.get_entity(bot_username)
     last_message = await client.get_messages(bot, limit=1)
@@ -136,8 +159,11 @@ async def run_inline_search_and_pick_first(
         bot,
         after_id=last_message_id,
         timeout_seconds=timeout,
+        stop_event=stop_event,
     )
     if not next_message:
+        if stop_event is not None and stop_event.is_set():
+            return {"ok": True, "reason": "stopped"}
         return {"ok": False, "reason": "timeout_after_inline_pick"}
 
     picked_inline_title = first.title or first.description or ""

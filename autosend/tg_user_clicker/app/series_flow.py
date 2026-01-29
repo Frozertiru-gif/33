@@ -48,9 +48,12 @@ async def _wait_for_next_media_message(
     *,
     after_id: int,
     timeout_seconds: int,
+    stop_event: asyncio.Event | None = None,
 ) -> Any | None:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
+        if stop_event is not None and stop_event.is_set():
+            return None
         messages = await client.get_messages(entity, limit=10)
         for message in messages:
             if message.id <= after_id:
@@ -70,12 +73,14 @@ async def wait_for_media_after(
     *,
     after_id: int,
     timeout_seconds: int,
+    stop_event: asyncio.Event | None = None,
 ) -> Any | None:
     return await _wait_for_next_media_message(
         client,
         entity,
         after_id=after_id,
         timeout_seconds=timeout_seconds,
+        stop_event=stop_event,
     )
 
 
@@ -87,9 +92,17 @@ async def run_series_until_end(
     state: dict[str, Any] | None = None,
     dedup_limit: int = 0,
     state_path: str | None = None,
+    stop_event: asyncio.Event | None = None,
 ) -> dict:
     config = load_config()
     entity = await client.get_entity(bot_username)
+    if stop_event is not None and stop_event.is_set():
+        return {
+            "ok": True,
+            "reason": "stopped",
+            "sent_total": 0,
+            "last_message_id": start_from_message_id,
+        }
     current_msg = await _find_start_message(client, entity, start_from_message_id)
 
     if not current_msg or not media.is_media_message(current_msg):
@@ -138,6 +151,13 @@ async def run_series_until_end(
             logger.info("sent to target msg_id=%s", current_msg.id)
 
     while True:
+        if stop_event is not None and stop_event.is_set():
+            return {
+                "ok": True,
+                "reason": "stopped",
+                "sent_total": sent_total,
+                "last_message_id": current_msg.id,
+            }
         match = find_button(current_msg, config.button_next_text)
         if not match:
             reason = "end_no_next_button"
@@ -151,6 +171,13 @@ async def run_series_until_end(
 
         next_media = None
         for _ in range(config.max_retries_next):
+            if stop_event is not None and stop_event.is_set():
+                return {
+                    "ok": True,
+                    "reason": "stopped",
+                    "sent_total": sent_total,
+                    "last_message_id": current_msg.id,
+                }
             await click_button(current_msg, match)
             logger.info("clicked NEXT on msg_id=%s", current_msg.id)
             await asyncio.sleep(config.wait_after_click_seconds)
@@ -159,9 +186,17 @@ async def run_series_until_end(
                 entity,
                 after_id=current_msg.id,
                 timeout_seconds=config.wait_next_media_timeout_seconds,
+                stop_event=stop_event,
             )
             if next_media:
                 break
+            if stop_event is not None and stop_event.is_set():
+                return {
+                    "ok": True,
+                    "reason": "stopped",
+                    "sent_total": sent_total,
+                    "last_message_id": current_msg.id,
+                }
 
         if not next_media:
             reason = "end_timeout_no_new_media"

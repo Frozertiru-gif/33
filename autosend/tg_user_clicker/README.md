@@ -100,6 +100,30 @@ Reset resume state (requires confirmation):
 python -m app.cli reset --yes
 ```
 
+## Web UI
+
+Install dependencies (FastAPI + Uvicorn are included in `requirements.txt`), then run:
+
+```bash
+uvicorn app.web.server:app --host 127.0.0.1 --port 8080
+```
+
+Open <http://127.0.0.1:8080> in your browser to:
+
+- запускать `run-one` и `run-list`,
+- смотреть статус `state.json`,
+- останавливать/сбрасывать раннер,
+- читать логи.
+
+### API endpoints
+
+- `GET /api/status` — state.json + статус раннера.
+- `POST /api/run/one` — `{ "title": str, "bot_username"?: str, "inline"?: bool }`.
+- `POST /api/run/list` — `{ "titles": [str] | null, "titles_file"?: str | null, "bot_username"?: str, "inline"?: bool }`.
+- `POST /api/stop` — мягкая остановка.
+- `POST /api/reset` — сброс state.json.
+- `GET /api/logs?tail=200` — последние строки логов.
+
 Resume behavior:
 
 - Progress is stored in `state.json` (configurable via `STATE_PATH`).
